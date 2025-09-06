@@ -12,7 +12,7 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: process.env.ORIGIN?.split(',') || '*', credentials: true }));
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ecom_assign';
+const MONGO_URI = process.env.MONGO_URI;
 await mongoose.connect(MONGO_URI);
 
 app.get('/', (req, res) => res.json({ ok: true, service: 'ecom-backend' }));
