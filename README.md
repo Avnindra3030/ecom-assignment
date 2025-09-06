@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # E-commerce SPA Assignment
 
 A minimal full-stack implementation that satisfies the assignment:
@@ -52,3 +53,40 @@ See `backend/README.md`
 ## Notes
 - Cart items are stored in the user's record, so they persist after logout.
 - For admin-like CRUD of items, use the protected `/api/items` POST/PUT/DELETE endpoints with any authenticated user token.
+=======
+# Ecom Backend
+
+Tech: Node.js, Express, MongoDB (Mongoose), JWT
+
+## ENV
+Create `.env` from `.env.example`
+
+```
+MONGO_URI=...
+JWT_SECRET=...
+PORT=8080
+ORIGIN=http://localhost:5173
+```
+
+## Run
+```
+npm install
+npm run dev
+```
+Seed items:
+```
+npm run seed
+```
+
+## API Overview
+- `POST /api/auth/signup {name,email,password}` -> `{token, user}`
+- `POST /api/auth/login {email,password}` -> `{token, user}`
+- `GET /api/items?q=&category=&min=&max=&sort=price:asc&page=1&limit=20`
+- `POST /api/items` (auth) -> create item
+- `PUT /api/items/:id` (auth)
+- `DELETE /api/items/:id` (auth)
+- `GET /api/cart` (auth) -> current cart
+- `POST /api/cart/add {itemId, qty}` (auth)
+- `PATCH /api/cart/update {itemId, qty}` (auth)
+- `DELETE /api/cart/remove {itemId}` (auth)
+>>>>>>> fc9d2db (Initial commit: E-commerce backend with auth, items, cart APIs)
