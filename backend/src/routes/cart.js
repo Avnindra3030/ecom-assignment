@@ -1,60 +1,37 @@
-import { Router } from 'express';
-import User from '../models/User.js';
-import Item from '../models/Item.js';
-import { authRequired } from '../middleware/auth.js';
+import express from 'express';
+import Cart from '../models/Cart.js';
+import { protect } from '../middleware/authMiddleware.js';
+const router = express.Router();
 
-const router = Router();
-
-// Get current user's cart
-router.get('/', authRequired, async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id).populate('cart.item');
-    res.json({ cart: user.cart || [] });
-  } catch (e) { next(e); }
+// Get cart
+router.get('/', protect, async (req, res) => {
+  const cart = await Cart.findOne({ user: req.user._id }).populate('items.item');
+  res.json(cart || { items: [] });
 });
 
-// Add item to cart: { itemId, qty }
-router.post('/add', authRequired, async (req, res, next) => {
-  try {
-    const { itemId, qty=1 } = req.body;
-    const item = await Item.findById(itemId);
-    if (!item) return res.status(404).json({ error: 'Item not found' });
+// Add item to cart
+router.post('/add', protect, async (req, res) => {
+  const { itemId, quantity } = req.body;
+  let cart = await Cart.findOne({ user: req.user._id });
+  if (!cart) cart = await Cart.create({ user: req.user._id, items: [] });
 
-    const user = await User.findById(req.user.id);
-    const existing = user.cart.find(c => c.item.toString() === itemId);
-    if (existing) existing.qty += Number(qty);
-    else user.cart.push({ item: itemId, qty: Number(qty) });
-    await user.save();
-    await user.populate('cart.item');
-    res.json({ cart: user.cart });
-  } catch (e) { next(e); }
+  const existingItem = cart.items.find(i => i.item.toString() === itemId);
+  if (existingItem) existingItem.quantity += quantity;
+  else cart.items.push({ item: itemId, quantity });
+
+  await cart.save();
+  res.json(cart);
 });
 
-// Update qty: { itemId, qty }
-router.patch('/update', authRequired, async (req, res, next) => {
-  try {
-    const { itemId, qty } = req.body;
-    const user = await User.findById(req.user.id);
-    const existing = user.cart.find(c => c.item.toString() === itemId);
-    if (!existing) return res.status(404).json({ error: 'Not in cart' });
-    if (qty <= 0) user.cart = user.cart.filter(c => c.item.toString() != itemId);
-    else existing.qty = Number(qty);
-    await user.save();
-    await user.populate('cart.item');
-    res.json({ cart: user.cart });
-  } catch (e) { next(e); }
-});
+// Remove item from cart
+router.post('/remove', protect, async (req, res) => {
+  const { itemId } = req.body;
+  let cart = await Cart.findOne({ user: req.user._id });
+  if (!cart) return res.json({ items: [] });
 
-// Remove item: { itemId }
-router.delete('/remove', authRequired, async (req, res, next) => {
-  try {
-    const { itemId } = req.body;
-    const user = await User.findById(req.user.id);
-    user.cart = user.cart.filter(c => c.item.toString() !== itemId);
-    await user.save();
-    await user.populate('cart.item');
-    res.json({ cart: user.cart });
-  } catch (e) { next(e); }
+  cart.items = cart.items.filter(i => i.item.toString() !== itemId);
+  await cart.save();
+  res.json(cart);
 });
 
 export default router;
