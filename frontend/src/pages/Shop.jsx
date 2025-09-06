@@ -1,80 +1,123 @@
-import { useEffect, useMemo, useState } from 'react'
-import NavBar from '../components/NavBar'
-import { client } from '../api'
-import { useAuth } from '../state/auth'
-import { setAuth } from '../api'
-import { Link } from 'react-router-dom'
+// frontend/src/pages/Shop.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import NavBar from "../components/NavBar";
+import ProductCard from "../components/ProductCard";
+import { products as dummyProducts } from "../data/products";
+import { useAuth } from "../state/auth";
+import { client, setAuth } from "../api";
+
+const LOCAL_CART_KEY = "local_cart_v1";
 
 export default function Shop() {
-  const [items, setItems] = useState([])
-  const [total, setTotal] = useState(0)
-  const [filters, setFilters] = useState({ q:'', category:'', min:'', max:'', sort:'createdAt:desc', page:1 })
-  const { token } = useAuth()
-  useEffect(()=>{ setAuth(token) }, [token])
+  const { token } = useAuth();
+  const [items, setItems] = useState(dummyProducts);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("");
+  const [sort, setSort] = useState("featured");
+  const [priceRange, setPriceRange] = useState([0, 50000]);
+  const [cartCount, setCartCount] = useState(0);
 
-  useEffect(()=>{
-    (async ()=>{
-      const { data } = await client.get('/api/items', { params: filters })
-      setItems(data.items); setTotal(data.total)
-    })()
-  }, [filters])
+  useEffect(() => { setAuth(token); }, [token]);
 
-  async function addToCart(id) {
-    if (!token) return alert('Please login first')
-    await client.post('/api/cart/add', { itemId: id, qty: 1 })
-    alert('Added to cart')
+  useEffect(() => {
+    // load local cart count
+    const local = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
+    setCartCount(local.reduce((s, c) => s + c.qty, 0));
+  }, []);
+
+  const categories = useMemo(() => {
+    const set = new Set(dummyProducts.map(p => p.category));
+    return ["All", ...Array.from(set)];
+  }, []);
+
+  const filtered = useMemo(() => {
+    return items
+      .filter(p => (!query || p.title.toLowerCase().includes(query.toLowerCase())))
+      .filter(p => (!category || category === "All" ? true : p.category === category))
+      .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
+      .sort((a, b) => {
+        if (sort === "low") return a.price - b.price;
+        if (sort === "high") return b.price - a.price;
+        if (sort === "rating") return b.rating - a.rating;
+        return 0;
+      });
+  }, [items, query, category, sort, priceRange]);
+
+  async function addToCart(product) {
+    // If you have a backend item id and authenticated, you could try to POST to /api/cart/add here.
+    // For dummy-data UX we save cart locally so the UI feels real.
+    try {
+      if (token && product.apiId) {
+        // optional: persist to backend if product.apiId is set
+        await client.post("/api/cart/add", { itemId: product.apiId, qty: 1 });
+        // fetch new cart count from server if needed
+      } else {
+        // localStorage cart
+        const local = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
+        const existing = local.find(c => c.id === product.id);
+        if (existing) existing.qty += 1;
+        else local.push({ id: product.id, product, qty: 1 });
+        localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(local));
+        setCartCount(local.reduce((s, c) => s + c.qty, 0));
+      }
+      alert("Added to cart");
+    } catch (e) {
+      console.error(e);
+      alert("Could not add to cart");
+    }
   }
 
-  const categories = useMemo(()=>['apparel','electronics','fitness'], [])
-
   return (
-    <div>
-      <NavBar />
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <aside className="md:col-span-1 bg-white p-4 rounded-2xl border">
-            <h2 className="font-semibold mb-3">Filters</h2>
-            <input className="w-full border rounded-lg px-3 py-2 mb-2" placeholder="Search"
-              value={filters.q} onChange={e=>setFilters(f=>({...f, q:e.target.value, page:1}))} />
-            <select className="w-full border rounded-lg px-3 py-2 mb-2" value={filters.category}
-              onChange={e=>setFilters(f=>({...f, category:e.target.value, page:1}))}>
-              <option value="">All categories</option>
-              {categories.map(c=><option key={c} value={c}>{c}</option>)}
-            </select>
-            <div className="flex gap-2 mb-2">
-              <input className="w-full border rounded-lg px-3 py-2" placeholder="Min price" type="number"
-                value={filters.min} onChange={e=>setFilters(f=>({...f, min:e.target.value, page:1}))} />
-              <input className="w-full border rounded-lg px-3 py-2" placeholder="Max price" type="number"
-                value={filters.max} onChange={e=>setFilters(f=>({...f, max:e.target.value, page:1}))} />
+    <div className="min-h-screen bg-gray-50">
+      <NavBar cartCount={cartCount} onSearch={setQuery} />
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        <section className="mb-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <aside className="lg:col-span-1 bg-white rounded-2xl p-4 shadow-sm">
+            <h3 className="font-semibold mb-3">Filters</h3>
+            <div className="mb-3">
+              <label className="block text-sm text-gray-600 mb-1">Category</label>
+              <select className="w-full border rounded-lg px-3 py-2" value={category} onChange={e => setCategory(e.target.value)}>
+                {categories.map(c => <option key={c} value={c === "All" ? "" : c}>{c}</option>)}
+              </select>
             </div>
-            <select className="w-full border rounded-lg px-3 py-2 mb-2" value={filters.sort}
-              onChange={e=>setFilters(f=>({...f, sort:e.target.value}))}>
-              <option value="createdAt:desc">Newest</option>
-              <option value="price:asc">Price: Low to High</option>
-              <option value="price:desc">Price: High to Low</option>
-            </select>
+
+            <div className="mb-3">
+              <label className="block text-sm text-gray-600 mb-1">Sort</label>
+              <select className="w-full border rounded-lg px-3 py-2" value={sort} onChange={e => setSort(e.target.value)}>
+                <option value="featured">Featured</option>
+                <option value="low">Price: Low to High</option>
+                <option value="high">Price: High to Low</option>
+                <option value="rating">Top Rated</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Price up to</label>
+              <input type="range" min="0" max="50000" value={priceRange[1]} onChange={(e) => setPriceRange([0, Number(e.target.value)])} />
+              <div className="text-sm text-gray-700 mt-1">Up to ₹{priceRange[1]}</div>
+            </div>
           </aside>
-          <main className="md:col-span-3">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold">Items</h2>
-              <Link to="/cart" className="text-blue-600 underline">Go to cart</Link>
+
+          <div className="lg:col-span-3">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold">Featured products</h2>
+                <p className="text-sm text-gray-600">{filtered.length} results</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input placeholder="Search products..." value={query} onChange={e => setQuery(e.target.value)}
+                  className="border rounded-lg px-3 py-2 hidden sm:block w-64" />
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map(it => (
-                <div key={it._id} className="bg-white border rounded-2xl overflow-hidden">
-                  <img src={it.image} alt={it.title} className="w-full h-40 object-cover" />
-                  <div className="p-4">
-                    <div className="font-semibold">{it.title}</div>
-                    <div className="text-sm text-gray-600 capitalize">{it.category}</div>
-                    <div className="text-lg font-bold mt-2">₹{it.price}</div>
-                    <button onClick={()=>addToCart(it._id)} className="mt-3 w-full py-2 rounded-lg bg-blue-600 text-white">Add to cart</button>
-                  </div>
-                </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filtered.map(p => (
+                <ProductCard key={p.id} product={p} onAddToCart={addToCart} />
               ))}
             </div>
-          </main>
-        </div>
-      </div>
+          </div>
+        </section>
+      </main>
     </div>
-  )
+  );
 }
